@@ -304,6 +304,22 @@ static bool iqs7211e_read_ati_active(const struct device *dev) {
     return (transfer_bytes[0] & (1 << IQS7211E_TP_RE_ATI_BIT)) != 0;
 }
 
+static void iqs7211e_suspend(const struct device *dev) {
+    uint8_t transfer_bytes[2];
+    iqs7211e_i2c_read_reg(dev, IQS7211E_MM_SYS_CONTROL, transfer_bytes, 2);
+    transfer_bytes[1] |= (1 << 3);
+    iqs7211e_i2c_write_reg(dev, IQS7211E_MM_SYS_CONTROL, transfer_bytes, 2);
+    LOG_DBG("Device suspended");
+}
+
+static void iqs7211e_resume(const struct device *dev) {
+    uint8_t transfer_bytes[2];
+    iqs7211e_i2c_read_reg(dev, IQS7211E_MM_SYS_CONTROL, transfer_bytes, 2);
+    transfer_bytes[1] &= ~(1 << 3);
+    iqs7211e_i2c_write_reg(dev, IQS7211E_MM_SYS_CONTROL, transfer_bytes, 2);
+    LOG_DBG("Device resumed");
+}
+
 static void iqs7211e_click_work_handler(struct k_work *work) {
     struct k_work_delayable *dwork = k_work_delayable_from_work(work);
     struct iqs7211e_data *data = CONTAINER_OF(dwork, struct iqs7211e_data, click_work);
@@ -321,6 +337,32 @@ static void iqs7211e_click_work_handler(struct k_work *work) {
     data->pending_click_type = 0;
 }
 
+static int iqs7211e_interrupt_configure(const struct device *dev, gpio_flags_t flags) {
+    const struct iqs7211e_config *cfg = dev->config;
+
+    if (!gpio_is_ready_dt(&cfg->irq_gpio)) {
+        return 0;
+    }
+
+    return gpio_pin_interrupt_configure_dt(&cfg->irq_gpio, flags);
+}
+
+static void iqs7211e_interrupt_enable(const struct device *dev) {
+    int ret = iqs7211e_interrupt_configure(dev, GPIO_INT_LEVEL_LOW);
+
+    if (ret < 0) {
+        LOG_ERR("Failed to re-enable IRQ interrupt: %d", ret);
+    }
+}
+
+static void iqs7211e_interrupt_disable(const struct device *dev) {
+    int ret = iqs7211e_interrupt_configure(dev, GPIO_INT_DISABLE);
+
+    if (ret < 0) {
+        LOG_WRN("Failed to mask IRQ interrupt: %d", ret);
+    }
+}
+
 static void iqs7211e_motion_work_handler(struct k_work *work) {
     struct iqs7211e_data *data = CONTAINER_OF(work, struct iqs7211e_data, motion_work);
     const struct device *dev = data->dev;
@@ -331,18 +373,21 @@ static void iqs7211e_motion_work_handler(struct k_work *work) {
     LOG_DBG("Motion work handler started");
     if (!data->init_complete) {
         LOG_WRN("Device not initialized, skipping motion handling");
+        iqs7211e_interrupt_enable(dev);
         return;
     }
     
     // Only read data if device is ready
     if (!iqs7211e_is_ready(dev)) {
         LOG_WRN("Device not ready for motion data");
+        iqs7211e_interrupt_enable(dev);
         return;
     }
     
     ret = iqs7211e_get_base_data(dev, &base_data);
     if (ret < 0) {
         LOG_WRN("Get report failed, status: %d", ret);
+        iqs7211e_interrupt_enable(dev);
         return;
     }
  
@@ -481,10 +526,18 @@ static void iqs7211e_motion_work_handler(struct k_work *work) {
         data->previous_valid = false;
         data->finger_2_prev_valid = false;
     }
+
+    iqs7211e_interrupt_enable(dev);
 }
 
 static void iqs7211e_motion_handler(const struct device *gpio_dev, struct gpio_callback *cb, uint32_t pins) {
     struct iqs7211e_data *data = CONTAINER_OF(cb, struct iqs7211e_data, motion_cb);
+
+    ARG_UNUSED(gpio_dev);
+    ARG_UNUSED(pins);
+
+    iqs7211e_interrupt_disable(data->dev);
+
     k_work_submit(&data->motion_work);
 }
 
@@ -561,7 +614,7 @@ static int iqs7211e_configure(const struct device *dev) {
                         uint32_t sleep_ms = (uint32_t)rec[0] + 1;
                         k_sleep(K_MSEC(sleep_ms));
                     }
-                    
+
                     data->init_complete = true;
                     LOG_DBG("Init complete");
                 } else {
@@ -647,7 +700,7 @@ static int iqs7211e_init(const struct device *dev) {
     }
     
     if (gpio_is_ready_dt(&cfg->irq_gpio)) {
-        ret = gpio_pin_interrupt_configure_dt(&cfg->irq_gpio, GPIO_INT_EDGE_FALLING);
+        ret = iqs7211e_interrupt_configure(dev, GPIO_INT_LEVEL_LOW);
         if (ret != 0) {
             LOG_ERR("Motion interrupt configuration failed: %d", ret);
             return ret;
@@ -684,30 +737,15 @@ static int iqs7211e_pm_action(const struct device *dev, enum pm_device_action ac
                 return ret;
             }
         }
+
+        iqs7211e_suspend(dev);
         
-#if DT_INST_NODE_HAS_PROP(0, power_gpios)
-        if (gpio_is_ready_dt(&cfg->power_gpio)) {
-            ret = gpio_pin_configure_dt(&cfg->power_gpio, GPIO_DISCONNECTED);
-            if (ret < 0) {
-                LOG_ERR("Failed to disconnect power: %d", ret);
-                return ret;
-            }
-        }
-#endif
         data->init_complete = false;
         break;
         
     case PM_DEVICE_ACTION_RESUME:
-#if DT_INST_NODE_HAS_PROP(0, power_gpios)
-        if (gpio_is_ready_dt(&cfg->power_gpio)) {
-            ret = gpio_pin_configure_dt(&cfg->power_gpio, GPIO_OUTPUT_ACTIVE);
-            if (ret < 0) {
-                LOG_ERR("Failed to enable power: %d", ret);
-                return ret;
-            }
-            k_sleep(K_MSEC(10));
-        }
-#endif
+
+        iqs7211e_resume(dev);
         
         if (gpio_is_ready_dt(&cfg->irq_gpio)) {
             ret = gpio_pin_configure_dt(&cfg->irq_gpio, GPIO_INPUT);
@@ -716,7 +754,7 @@ static int iqs7211e_pm_action(const struct device *dev, enum pm_device_action ac
                 return ret;
             }
             
-            ret = gpio_pin_interrupt_configure_dt(&cfg->irq_gpio, GPIO_INT_EDGE_FALLING);
+            ret = iqs7211e_interrupt_configure(dev, GPIO_INT_LEVEL_LOW);
             if (ret < 0) {
                 LOG_ERR("Failed to enable IRQ interrupt: %d", ret);
                 return ret;
