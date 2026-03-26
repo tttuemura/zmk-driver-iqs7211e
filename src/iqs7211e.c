@@ -44,6 +44,7 @@ struct iqs7211e_config {
     size_t init_len;
     bool scroller_mode;
     bool v_invert;
+    bool h_invert;
 };
 
 struct iqs7211e_data {
@@ -1184,6 +1185,7 @@ static int iqs7211e_pm_action(const struct device *dev, enum pm_device_action ac
             IQS7211E_INIT_DATA_LEN),                                                         \
         .scroller_mode = DT_INST_PROP_OR(n, scroller_mode, false),                                  \
         .v_invert = DT_INST_PROP_OR(n, v_invert, false),                                        \
+        .h_invert = DT_INST_PROP_OR(n, h_invert, false),
     };                                                                                             \
                                                                                                    \
     static struct iqs7211e_data iqs7211e_data_##n;                                                \
