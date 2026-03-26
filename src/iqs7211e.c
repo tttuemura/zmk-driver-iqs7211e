@@ -1173,31 +1173,31 @@ static int iqs7211e_pm_action(const struct device *dev, enum pm_device_action ac
  * DT property name in DTS is `init-symbol` but DT macros use
  * an underscore variant `init_symbol`.
  */
-#define IQS7211E_INIT(n)                                                                           \
-    extern const uint8_t iqs7211e_init_default[];                                                   \
+#define IQS7211E_INIT(n)                                                                         \
+    extern const uint8_t iqs7211e_init_default[];                                                \
     COND_CODE_1(DT_INST_NODE_HAS_PROP(n, init_symbol),                                           \
-        (extern const uint8_t DT_PROP(DT_DRV_INST(n), init_symbol_STRING_UNQUOTED )[];),                           \
-        ())                                                                                       \
-    static const struct iqs7211e_config iqs7211e_cfg_##n = {                                      \
-        .i2c = I2C_DT_SPEC_INST_GET(n),                                                           \
-        .irq_gpio = GPIO_DT_SPEC_INST_GET(n, irq_gpios),                                          \
-        .power_gpio = GPIO_DT_SPEC_INST_GET_OR(n, power_gpios, {0}),                              \
-        .init_data = COND_CODE_1(DT_INST_NODE_HAS_PROP(n, init_symbol),                           \
-            (DT_PROP(DT_DRV_INST(n), init_symbol_STRING_UNQUOTED )),                                               \
-            (iqs7211e_init_default)),                                                             \
-        .init_len = COND_CODE_1(DT_INST_NODE_HAS_PROP(n, init_symbol),                             \
-            (DT_PROP(DT_DRV_INST(n), init_length)),                                               \
-            IQS7211E_INIT_DATA_LEN),                                                         \
-        .scroller_mode = DT_INST_PROP_OR(n, scroller_mode, false),                                  \
-        .v_invert = DT_INST_PROP_OR(n, v_invert, false),                                        \
-        .h_invert = DT_INST_PROP_OR(n, h_invert, false),
-    };                                                                                             \
-                                                                                                   \
+        (extern const uint8_t DT_PROP(DT_DRV_INST(n), init_symbol_STRING_UNQUOTED )[];),         \
+        ())                                                                                      \
+    static const struct iqs7211e_config iqs7211e_cfg_##n = {                                     \
+        .i2c = I2C_DT_SPEC_INST_GET(n),                                                          \
+        .irq_gpio = GPIO_DT_SPEC_INST_GET(n, irq_gpios),                                         \
+        .power_gpio = GPIO_DT_SPEC_INST_GET_OR(n, power_gpios, {0}),                             \
+        .init_data = COND_CODE_1(DT_INST_NODE_HAS_PROP(n, init_symbol),                          \
+            (DT_PROP(DT_DRV_INST(n), init_symbol_STRING_UNQUOTED )),                             \
+            (iqs7211e_init_default)),                                                            \
+        .init_len = COND_CODE_1(DT_INST_NODE_HAS_PROP(n, init_symbol),                           \
+            (DT_PROP(DT_DRV_INST(n), init_length)),                                              \
+            IQS7211E_INIT_DATA_LEN),                                                             \
+        .scroller_mode = DT_INST_PROP_OR(n, scroller_mode, false),                               \
+        .v_invert = DT_INST_PROP_OR(n, v_invert, false),                                         \
+        .h_invert = DT_INST_PROP_OR(n, h_invert, false),                                          \  
+    };                                                                                            \
+                                                                                                  \
     static struct iqs7211e_data iqs7211e_data_##n;                                                \
-                                                                                                   \
+                                                                                                  \
     PM_DEVICE_DT_INST_DEFINE(n, iqs7211e_pm_action);                                              \
                                                                                                    \
-    DEVICE_DT_INST_DEFINE(n, iqs7211e_init, PM_DEVICE_DT_INST_GET(n), &iqs7211e_data_##n,        \
+    DEVICE_DT_INST_DEFINE(n, iqs7211e_init, PM_DEVICE_DT_INST_GET(n), &iqs7211e_data_##n,          \
                           &iqs7211e_cfg_##n, POST_KERNEL, CONFIG_INPUT_INIT_PRIORITY, NULL);
 
 DT_INST_FOREACH_STATUS_OKAY(IQS7211E_INIT)
