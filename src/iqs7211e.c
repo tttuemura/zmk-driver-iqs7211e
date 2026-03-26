@@ -156,6 +156,10 @@ static int16_t iqs7211e_vertical_scroll_delta(const struct iqs7211e_config *cfg,
     return cfg->v_invert ? y_movement : -y_movement;
 }
 
+static int16_t iqs7211e_horizontal_scroll_delta(const struct iqs7211e_config *cfg, int16_t x_movement) {
+    return cfg->h_invert ? -x_movement : x_movement;
+}
+
 #if defined(CONFIG_IQS7211E_SCROLLER_INERTIA) && CONFIG_IQS7211E_SCROLLER_INERTIA
 static int32_t iqs7211e_abs32(int32_t value) {
     return (value < 0) ? -value : value;
@@ -323,7 +327,8 @@ static void iqs7211e_process_scroller_motion(struct iqs7211e_data *data,
                                              int16_t y_movement,
                                              int64_t current_time) {
     int16_t v_delta = iqs7211e_vertical_scroll_delta(cfg, y_movement);
-
+    int16_t h_delta = iqs7211e_horizontal_scroll_delta(cfg, x_movement);
+    
     if (data->scroller_axis_lock == IQS7211E_SCROLL_AXIS_NONE) {
         if (hwheel_zone && x_movement != 0 && abs(x_movement) > abs(y_movement)) {
             data->scroller_axis_lock = IQS7211E_SCROLL_AXIS_HORIZONTAL;
@@ -335,8 +340,8 @@ static void iqs7211e_process_scroller_motion(struct iqs7211e_data *data,
     }
 
     if (data->scroller_axis_lock == IQS7211E_SCROLL_AXIS_HORIZONTAL) {
-        if (x_movement != 0) {
-            iqs7211e_report_scroll(data, INPUT_REL_HWHEEL, x_movement, current_time);
+        if (h_delta != 0) {
+            iqs7211e_report_scroll(data, INPUT_REL_HWHEEL, h_delta, current_time);
         }
     } else if (data->scroller_axis_lock == IQS7211E_SCROLL_AXIS_VERTICAL) {
         if (v_delta != 0) {
